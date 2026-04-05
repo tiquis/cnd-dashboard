@@ -952,4 +952,4 @@ if uploaded:
 else:
     st.info("Please upload your CSV file")
 
-st.caption("CND Dashboard 2022 Rafael Magallanes Quintanar 2022 April 2026")
+st.caption("CND Dashboard by Rafael Magallanes Quintanar April 2026")
