@@ -11,7 +11,7 @@ import datetime
 
 st.set_page_config(page_title="CND Dashboard - Academic", layout="wide")
 st.title("🧪 Compositional Nutrient Diagnosis (CND) – Dashboard")
-st.markdown("**English Academic Version • Based on Rafael Magallanes Quintanar PhD Thesis**")
+st.markdown("**Based on Rafael Magallanes Quintanar PhD Thesis**")
 
 # ===================== NORMAS DE TU TESIS =====================
 norms_tesis = {
