@@ -13,7 +13,7 @@ st.set_page_config(page_title="CND Dashboard - Academic", layout="wide")
 st.title("🧪 Compositional Nutrient Diagnosis (CND) – Dashboard")
 st.markdown("**English Academic Version • Based on Rafael Magallanes Quintanar PhD Thesis**")
 
-# ===================== NORMS FROM Rafael Magallanes Quintanar Ph. D. Thesis =====================
+# ===================== NORMAS DE TU TESIS =====================
 norms_tesis = {
     "Maize (Zea mays L.)": {"V_N":0.462, "V_P":-1.690, "V_K":-0.259, "V_Ca":-0.866, "V_Mg":-1.686, "V_R":4.040,
                             "SD_N":0.117, "SD_P":0.119, "SD_K":0.097, "SD_Ca":0.087, "SD_Mg":0.176, "SD_R":0.091},
@@ -516,34 +516,117 @@ if uploaded:
     # ===================== TAB 2 =====================
     with tab2:
         st.subheader("🔬 Real-time Diagnosis")
-        cols = st.columns(len(nutrient_cols))
+        st.markdown(
+            "Enter foliar nutrient concentrations (% dry matter) for the sample to diagnose. "
+            "Default values are the **dataset means** — a balanced specimen near the "
+            "population centre should give a low CND r²."
+        )
+
+        # ── Default values = dataset means (rounded to 3 decimal places) ─
+        dataset_means = {col: round(float(df_raw[col].mean()), 3) for col in nutrient_cols}
+
+        cols_input = st.columns(len(nutrient_cols))
         sample_data = {}
         for i, nut in enumerate(nutrient_cols):
-            with cols[i]:
-                sample_data[nut] = st.number_input(f"{nut} (%)", value=2.0 if nut == 'N' else 0.3)
-        
-        sample = pd.DataFrame([sample_data])
-        sample_v, _ = compute_vx(sample, nutrient_cols)
-        sample_v = sample_v.iloc[0]
-        
-        indices = {}
-        r2 = 0
-        for col in nutrient_cols + ['R']:
-            v = sample_v[f'V_{col}']
-            v_star = norms.get(f'V_{col}', 0)
-            sd = norms.get(f'SD_{col}', 0.1)
-            ix = (v - v_star) / sd if sd != 0 else np.nan
-            indices[f'I_{col}'] = round(ix, 3)
-            r2 += ix**2 if not np.isnan(ix) else 0
-        
-        st.json(indices)
-        st.metric("CND r²", round(r2, 3))
-        if r2 < critical_r2:
-            st.success("✅ Nutrient balance → High yield potential")
-        else:
-            st.error("⚠️ Nutrient imbalance")
+            with cols_input[i]:
+                sample_data[nut] = st.number_input(
+                    f"{nut} (%)",
+                    value=dataset_means[nut],
+                    min_value=0.001,
+                    step=0.001,
+                    format="%.3f"
+                )
 
-    # ===================== TAB 3: DOS GRÁFICAS =====================
+        # ── Compute clr and indices ───────────────────────────────────────
+        sample_df = pd.DataFrame([sample_data])
+        sample_v, _ = compute_vx(sample_df, nutrient_cols)
+        sample_v = sample_v.iloc[0]
+
+        indices = {}
+        r2_val = 0.0
+        for col in nutrient_cols + ['R']:
+            v      = sample_v[f'V_{col}']
+            v_star = norms.get(f'V_{col}', 0)
+            sd     = norms.get(f'SD_{col}', 0.1)
+            ix     = (v - v_star) / sd if sd != 0 else np.nan
+            indices[f'I_{col}'] = round(ix, 4)
+            r2_val += ix**2 if not np.isnan(ix) else 0
+
+        # ── Summary metrics ───────────────────────────────────────────────
+        m1, m2, m3 = st.columns(3)
+        m1.metric("CND r²", f"{r2_val:.3f}")
+        m2.metric("Critical r² (χ², df={})".format(d_plus_1), f"{critical_r2:.4f}")
+        balanced = r2_val < critical_r2
+        m3.metric("Diagnosis", "✅ Balanced" if balanced else "⚠️ Imbalanced")
+
+        if balanced:
+            st.success(f"✅ Nutrient balance — high yield potential  "
+                       f"(r² = {r2_val:.3f} < {critical_r2:.4f})")
+        else:
+            st.error(f"⚠️ Nutrient imbalance  "
+                     f"(r² = {r2_val:.3f} ≥ {critical_r2:.4f})")
+
+        st.divider()
+
+        # ── Bar chart of nutrient indices ─────────────────────────────────
+        index_labels = [f"I({col})" for col in nutrient_cols + ['R']]
+        index_values = [indices[f'I_{col}'] for col in nutrient_cols + ['R']]
+
+        bar_colors = [
+            'crimson' if abs(v) == max(abs(x) for x in index_values)
+            else ('steelblue' if v >= 0 else 'tomato')
+            for v in index_values
+        ]
+
+        fig_bar = go.Figure(go.Bar(
+            x=index_labels,
+            y=index_values,
+            marker_color=bar_colors,
+            text=[f"{v:+.3f}" for v in index_values],
+            textposition='outside',
+        ))
+        fig_bar.add_hline(y=0, line_color='black', line_width=1)
+        fig_bar.update_layout(
+            title=dict(
+                text=(f"CND Nutrient Indices — r² = {r2_val:.3f}  |  "
+                      f"Critical = {critical_r2:.4f}  |  df = {d_plus_1}"),
+                x=0.5, xanchor='center', font=dict(size=14)
+            ),
+            xaxis=dict(title="Nutrient index", tickfont=dict(size=13)),
+            yaxis=dict(
+                title="Index value (I_X)",
+                tickfont=dict(size=13),
+                zeroline=False,
+                gridcolor="lightgray",
+            ),
+            plot_bgcolor="white", paper_bgcolor="white",
+            height=420,
+            showlegend=False,
+            margin=dict(t=60, b=60, l=60, r=40),
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+        # ── Limiting-nutrient ranking table ───────────────────────────────
+        rank_data = sorted(
+            [(f"I({col})", indices[f'I_{col}']) for col in nutrient_cols + ['R']],
+            key=lambda x: abs(x[1]), reverse=True
+        )
+        rank_df = pd.DataFrame(rank_data, columns=['Index', 'Value'])
+        rank_df.insert(0, 'Rank', range(1, len(rank_df)+1))
+        rank_df['|Value|'] = rank_df['Value'].abs().round(4)
+        rank_df['Value'] = rank_df['Value'].round(4)
+        rank_df['Status'] = rank_df['Value'].apply(
+            lambda v: 'Excess' if v > 0 else 'Deficiency'
+        )
+
+        st.markdown("**Limiting-nutrient ranking** (highest |I_X| = most limiting):")
+        st.dataframe(rank_df, use_container_width=True, hide_index=True)
+
+        # ── Raw indices (collapsible) ─────────────────────────────────────
+        with st.expander("Raw index values (JSON)"):
+            st.json(indices)
+
+    # ===================== TAB 3: DOS SUBPESTAÑAS ========================
     with tab3:
         st.subheader("Graphs")
         subtab_cumvar, subtab_chisq = st.tabs([
@@ -551,7 +634,7 @@ if uploaded:
             "Chi-Square Distribution of CND r\u00b2"
         ])
 
-    # ── Sub-tab A: Cumulative Variance Ratio (existing plot) ──────────────
+    # ── Sub-tab A: Cumulative Variance Ratio ──────────────────────────────
     with subtab_cumvar:
         st.markdown("**Multi-nutrient plot \u2013 style of Khiari et al. (2001)**")
 
@@ -733,43 +816,40 @@ if uploaded:
         except Exception:
             st.info("Install `kaleido` (`pip install kaleido`) to enable PNG export.")
 
-    # ── Sub-tab B: Chi-Square CDF of CND r² ───────────────────────────────
+    # ── Sub-tab B: Chi-Square CDF of CND r² ──────────────────────────────
     with subtab_chisq:
         st.markdown(
             "**Empirical vs. theoretical \u03c7\u00b2 cumulative distribution "
-            f"function \u2013 style of Magallanes-Quintanar et al. (2004)**"
+            "function \u2013 style of Magallanes-Quintanar et al. (2004)**"
         )
 
-        # ── Compute CND r² for every observation ──────────────────────────
+        # Compute CND r² for all observations using derived norms
         df_r2 = df.copy()
         for col in nutrient_cols + ['R']:
-            vcol   = f'V_{col}'
             v_star = norms[f'V_{col}']
             sd     = norms[f'SD_{col}']
-            df_r2[f'I_{col}'] = (df_r2[vcol] - v_star) / sd if sd != 0 else np.nan
+            df_r2[f'I_{col}'] = (
+                (df_r2[f'V_{col}'] - v_star) / sd if sd != 0 else np.nan
+            )
         i_cols = [f'I_{col}' for col in nutrient_cols + ['R']]
         df_r2['CND_r2'] = (df_r2[i_cols] ** 2).sum(axis=1)
 
-        r2_obs = np.sort(df_r2['CND_r2'].dropna().values)   # ascending
+        r2_obs   = np.sort(df_r2['CND_r2'].dropna().values)
         n_obs_r2 = len(r2_obs)
-
-        # Empirical CDF: plotting position i/n  (i = 1..n)
-        emp_cdf = np.arange(1, n_obs_r2 + 1) / n_obs_r2
+        emp_cdf  = np.arange(1, n_obs_r2 + 1) / n_obs_r2
 
         # Theoretical chi² CDF
         x_theory = np.linspace(0, max(r2_obs) * 1.15, 500)
         y_theory  = chi2.cdf(x_theory, df=d_plus_1)
 
-        # R² of empirical vs theoretical (linear regression of emp_cdf on y_hat)
-        # This matches the goodness-of-fit method used in the original publications
-        y_hat = chi2.cdf(r2_obs, df=d_plus_1)
+        # Goodness-of-fit R² (linear regression of emp_cdf on theoretical CDF values)
+        y_hat     = chi2.cdf(r2_obs, df=d_plus_1)
         slope_fit = np.polyfit(y_hat, emp_cdf, 1)
-        y_pred_fit = np.polyval(slope_fit, y_hat)
-        ss_res = np.sum((emp_cdf - y_pred_fit) ** 2)
-        ss_tot = np.sum((emp_cdf - emp_cdf.mean()) ** 2)
-        r2_fit = 1 - ss_res / ss_tot if ss_tot > 0 else 1.0
+        y_pred    = np.polyval(slope_fit, y_hat)
+        ss_res    = np.sum((emp_cdf - y_pred) ** 2)
+        ss_tot    = np.sum((emp_cdf - emp_cdf.mean()) ** 2)
+        r2_fit    = 1 - ss_res / ss_tot if ss_tot > 0 else 1.0
 
-        # ── Build figure ──────────────────────────────────────────────────
         fig_chi = go.Figure()
 
         # Theoretical CDF curve
@@ -777,7 +857,7 @@ if uploaded:
             x=x_theory, y=y_theory,
             mode='lines',
             name=f'\u03c7\u00b2({d_plus_1}) CDF (theoretical)',
-            line=dict(color='black', width=2),
+            line=dict(color='black', width=2)
         ))
 
         # Empirical CDF dots
@@ -786,91 +866,73 @@ if uploaded:
             mode='markers',
             name='CND r\u00b2 (empirical CDF)',
             marker=dict(symbol='circle', color='black', size=7,
-                        line=dict(width=1, color='black')),
+                        line=dict(width=1, color='black'))
         ))
 
-        # Vertical dashed line at r²_crit
+        # Dashed reference lines
         fig_chi.add_vline(
-            x=critical_r2,
-            line_dash="dash", line_color="black", line_width=1.5,
+            x=critical_r2, line_dash="dash", line_color="black", line_width=1.5
         )
-        # Horizontal dashed line at 1 - prop_low
         fig_chi.add_hline(
-            y=1 - prop_low,
-            line_dash="dash", line_color="black", line_width=1.5,
+            y=1 - prop_low, line_dash="dash", line_color="black", line_width=1.5
         )
 
-        # Annotation of critical value on x-axis (style of published figures)
+        # Annotations on axes
         fig_chi.add_annotation(
             x=critical_r2, y=0,
             text=f"<b>{critical_r2:.2f}</b>",
-            showarrow=False,
-            xanchor='center', yanchor='top',
-            yshift=-12,
-            font=dict(size=12),
+            showarrow=False, xanchor='center', yanchor='top',
+            yshift=-12, font=dict(size=12)
         )
-        # Annotation of proportion on y-axis
         fig_chi.add_annotation(
             x=0, y=1 - prop_low,
             text=f"<b>{1 - prop_low:.3f}</b>",
-            showarrow=False,
-            xanchor='right', yanchor='middle',
-            xshift=-6,
-            font=dict(size=12),
+            showarrow=False, xanchor='right', yanchor='middle',
+            xshift=-6, font=dict(size=12)
         )
 
         fig_chi.update_layout(
             title=dict(
                 text=(
                     f"The \u03c7\u00b2 cumulative distribution function with {d_plus_1} df<br>"
-                    f"<sub>R\u00b2 (empirical vs. theoretical) = {r2_fit:.4f} &nbsp;&nbsp; "
-                    f"Critical r\u00b2 = {critical_r2:.4f} &nbsp;&nbsp; "
-                    f"df = {d_plus_1} &nbsp;&nbsp; "
-                    f"Low-yield proportion = {prop_low*100:.1f}%</sub>"
+                    f"<sub>R\u00b2 (empirical vs. theoretical) = {r2_fit:.4f}"
+                    f"   \u2022   Critical r\u00b2 = {critical_r2:.4f}"
+                    f"   \u2022   df = {d_plus_1}"
+                    f"   \u2022   Low-yield proportion = {prop_low*100:.1f}%</sub>"
                 ),
                 x=0.5, xanchor='center', font=dict(size=16)
             ),
-            height=620,
-            width=800,
+            height=620, width=800,
             margin=dict(l=80, r=60, t=120, b=80),
             xaxis=dict(
-                title=dict(text=f"Chi-square or CND r\u00b2", font=dict(size=15)),
-                tickfont=dict(size=13),
-                gridcolor="lightgray",
+                title=dict(text="Chi-square or CND r\u00b2", font=dict(size=15)),
+                tickfont=dict(size=13), gridcolor="lightgray",
                 range=[0, max(r2_obs) * 1.15],
-                showline=True, linecolor='black', mirror=True,
-                zeroline=False,
+                showline=True, linecolor='black', mirror=True, zeroline=False
             ),
             yaxis=dict(
                 title=dict(text="Cumulative distribution function", font=dict(size=15)),
-                tickfont=dict(size=13),
-                gridcolor="lightgray",
+                tickfont=dict(size=13), gridcolor="lightgray",
                 range=[0, 1.05],
-                showline=True, linecolor='black', mirror=True,
-                zeroline=False,
+                showline=True, linecolor='black', mirror=True, zeroline=False
             ),
             legend=dict(
-                orientation="v",
-                yanchor="bottom", y=0.05,
-                xanchor="right",  x=0.98,
-                font=dict(size=13),
+                orientation="v", yanchor="bottom", y=0.05,
+                xanchor="right", x=0.98, font=dict(size=13),
                 bgcolor="rgba(255,255,255,0.9)",
-                bordercolor="black", borderwidth=1,
+                bordercolor="black", borderwidth=1
             ),
-            plot_bgcolor="white",
-            paper_bgcolor="white",
+            plot_bgcolor="white", paper_bgcolor="white"
         )
 
         st.plotly_chart(fig_chi, use_container_width=True)
 
-        # ── Goodness-of-fit summary ───────────────────────────────────────
         st.info(
-            f"**R\u00b2 (empirical vs. theoretical \u03c7\u00b2) = {r2_fit:.4f}**  \u2014  "
-            f"Critical r\u00b2 = {critical_r2:.4f} (df = {d_plus_1}, "
-            f"low-yield proportion = {prop_low*100:.1f}%)."
+            f"**R\u00b2 (empirical vs. theoretical \u03c7\u00b2) = {r2_fit:.4f}**"
+            f"  \u2014  Critical r\u00b2 = {critical_r2:.4f}"
+            f"  (df = {d_plus_1}, low-yield proportion = {prop_low*100:.1f}%)."
         )
 
-        # ── High-resolution PNG download ─────────────────────────────────
         try:
             png_chi = fig_chi.to_image(format="png", scale=5)
             st.download_button(
@@ -890,4 +952,4 @@ if uploaded:
 else:
     st.info("Please upload your CSV file")
 
-st.caption("CND Dashboard • Rafael Magallanes Quintanar • April 2026")
+st.caption("CND Dashboard 2022 Rafael Magallanes Quintanar 2022 April 2026")
