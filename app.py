@@ -176,8 +176,8 @@ if uploaded:
     norms = {}
     for col in nutrient_cols + ['R']:
         vcol = f'V_{col}'
-        norms[f'V_{col}'] = round(high_df[vcol].mean(), 4)
-        norms[f'SD_{col}'] = round(high_df[vcol].std(), 4)
+        norms[f'V_{col}'] = round(high_df[vcol].mean(), 5)
+        norms[f'SD_{col}'] = round(high_df[vcol].std(), 5)
 
     # Proportion of LOW-yield subpopulation at cutoff (Eq.[12] → Step 2)
     prop_low    = 1 - len(high_df) / len(df)
