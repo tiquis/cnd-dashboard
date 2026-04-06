@@ -11,7 +11,7 @@ import datetime
 
 st.set_page_config(page_title="CND Dashboard - Academic", layout="wide")
 st.title("🧪 Compositional Nutrient Diagnosis (CND) – Dashboard")
-st.markdown("**Based on Rafael Magallanes Quintanar PhD Thesis**")
+st.markdown("**English Academic Version • Based on Rafael Magallanes Quintanar PhD Thesis**")
 
 # ===================== NORMAS DE TU TESIS =====================
 norms_tesis = {
@@ -154,22 +154,21 @@ if uploaded:
         y_star_max = df['yield'].quantile(0.75)
         st.warning("⚠️ No valid cubic inflection point found; using 75th percentile as fallback.")
 
-    # Map continuous Y* to the closest discrete observed-yield partition.
-    # Sort yields descending; for each n1 (size of HIGH group), the partition
-    # boundary is yields_sorted[n1-1]. Find the n1 whose boundary is nearest Y*.
-    # This is the most faithful discrete analog of the cubic inflection point.
+    # Map continuous Y* to the discrete partition using Khiari et al. (2001)
+    # convention: Y_cutoff is the highest observed yield that does NOT exceed Y*.
+    # Sorted descending, boundary = yields_desc_arr[n1-1] DECREASES as n1 grows.
+    # We want the first (smallest) n1 such that boundary <= Y*_max, which gives
+    # the largest boundary still below or equal to Y* — the Cate-Nelson cutoff.
     df_sorted_yields = df.sort_values('yield', ascending=False).reset_index(drop=True)
     n_obs = len(df_sorted_yields)
     yields_desc_arr = df_sorted_yields['yield'].values
 
-    best_n1   = 2   # fallback: smallest valid group
-    best_diff = np.inf
+    best_n1 = n_obs - 2   # fallback: largest valid group
     for n1 in range(2, n_obs - 1):
         boundary = yields_desc_arr[n1 - 1]
-        diff = abs(boundary - y_star_max)
-        if diff < best_diff:
-            best_diff = diff
-            best_n1   = n1
+        if boundary <= y_star_max:
+            best_n1 = n1
+            break   # first match is the one with the highest boundary <= Y*
 
     cutoff  = float(yields_desc_arr[best_n1 - 1])
     high_df = df_sorted_yields.iloc[:best_n1].copy()
@@ -952,4 +951,4 @@ if uploaded:
 else:
     st.info("Please upload your CSV file")
 
-st.caption("CND Dashboard by Rafael Magallanes Quintanar April 2026")
+st.caption("CND Dashboard 2022 Rafael Magallanes Quintanar 2022 April 2026")
