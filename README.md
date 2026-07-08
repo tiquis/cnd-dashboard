@@ -19,6 +19,12 @@ CND is a multivariate approach for diagnosing plant nutrient imbalances based on
 
 ---
 
+## 2026-07 correction notice
+
+Cross-validating this tool's output against the original 2004 field-data worksheet revealed two silent bugs in the yield-cutoff calculation (an off-by-one indexing error and a duplicate-yield aggregation error), and a methodological difference from the cutoff-selection rule actually used in the original study. All three have been fixed as of the current version: see [`app.py`](app.py) inline comments and the accompanying COMPAG manuscript (under review) for full details. The tables below reflect the corrected output.
+
+---
+
 ## Features
 
 ### Tab 1 — Generate CND Norms
@@ -29,13 +35,13 @@ CND is a multivariate approach for diagnosing plant nutrient imbalances based on
 
 $$Y^* = -\frac{b}{3a}$$
 
-- Retains the highest valid *Y*\* across all *d* + 1 nutrient expressions
+- Averages the valid, in-range inflection points across all *d* + 1 nutrient expressions to obtain the reference cutoff (nutrient expressions whose *Y*\* falls outside the observed yield range are excluded as "out of context"), following the method documented by Magallanes-Quintanar et al. (2004)
 - Derives CND norms (*V*\*_X ± SD\*_X) from the high-yield subpopulation
 - Computes the critical χ² threshold from the exact low-yield proportion
 - Generates downloadable **PDF and Excel reports** with three publication-style tables:
-  - **Table 1:** Cubic-fit coefficients (*a*, *b*, *c*, *d*), *R*², and inflection-point yield *Y*\* for all nutrient expressions
-  - **Table 2:** CND norms and optimum nutrient concentration ranges for the high-yield subpopulation
-  - **Table 3:** clr values, nutrient indices (*I*_X), CND *r*², balance classification, and limiting-nutrient ranking for all observations
+- **Table 1:** Cubic-fit coefficients (*a*, *b*, *c*, *d*), *R*², and inflection-point yield *Y*\* for all nutrient expressions
+- **Table 2:** CND norms and optimum nutrient concentration ranges for the high-yield subpopulation
+- **Table 3:** clr values, nutrient indices (*I*_X), CND *r*², balance classification, and limiting-nutrient ranking for all observations
 
 ### Tab 2 — Real-Time Diagnosis
 - Manual entry of foliar nutrient concentrations (% dry matter)
@@ -49,7 +55,7 @@ Two sub-tabs with interactive Plotly figures and high-resolution PNG download (s
 
 **Sub-tab A — Cumulative Variance Ratio Function**
 - Multi-nutrient scatter plot with distinct marker symbols per nutrient, following the style of Khiari et al. (2001)
-- Overlaid cubic polynomial fit on the nutrient that determined *Y*_cutoff, with equation and *R*² in the title
+- Overlaid cubic polynomial fit on the valid nutrient expression whose inflection point is closest to the mean *Y*_cutoff, with equation and *R*² in the title
 - Reversed x-axis (highest yield on the left) and vertical dashed line at *Y*_cutoff
 
 **Sub-tab B — Chi-Square Distribution of CND *r*²**
@@ -78,6 +84,8 @@ The implementation follows exactly the seven-step procedure described in Khiari 
 
 > **Implementation note:** The variance ratio is computed as Var(*n*₂) / Var(*n*₁) — low-group over high-group variance. The expression as printed in Khiari et al. (2001) reads Var(*n*₁)/Var(*n*₂); numerical verification against Table 1 of that reference (*f*₁(*V*_P) = 129.47) confirms that the correct computational direction is the inverse.
 
+> **Cutoff selection:** Khiari et al. (2001) prescribe retaining the single highest valid *Y*\* across all nutrient expressions. Cross-validated against the original nopal worksheet, that is not the rule actually applied by Magallanes-Quintanar et al. (2004): the original authors instead averaged all in-context (in-range) *Y*\* values. CND Dashboard follows that documented mean-based criterion.
+
 ---
 
 ## Validation
@@ -89,22 +97,24 @@ The application was validated using **36 nopal (*Opuntia ficus-indica*) observat
 | Dataset | 36 nopal observations, Zacatecas, Mexico |
 | Nutrients | N, P, K, Ca, Mg (% dry matter) |
 | Yield variable | Fresh cladode biomass (kg plant⁻¹) |
-| High-yield subpopulation | 11 observations (30.6%) |
-| Yield cutoff (*Y*_cutoff) | 36.5 kg plant⁻¹ |
-| Low-yield proportion | 69.4% (25/36) |
-| Critical χ² (*df* = 6) | 3.8687 |
-| Goodness-of-fit *R*² (CDF) | 0.961 |
+| High-yield subpopulation | 14 observations (38.9%) |
+| Yield cutoff (*Y*_cutoff) | 34.2 kg plant⁻¹ |
+| Low-yield proportion | 61.1% (22/36) |
+| Critical χ² (*df* = 6) | 4.4867 |
+| Goodness-of-fit *R*² (CDF) | 0.9520 |
 
-All six CND norms were reproduced to five significant figures:
+All six CND norms were reproduced in close agreement with the original 2004 publication (differences ≤ 0.0153 in *V*\*_X units):
 
 | Nutrient | *V*\*_X | SD\*_X | Mean (%) | SD (%) |
 |----------|---------|--------|----------|--------|
-| N | −1.13336 | 0.07657 | 0.972 | 0.111 |
-| P | −2.26110 | 0.10932 | 0.315 | 0.034 |
-| K | +0.36715 | 0.23285 | 4.470 | 1.048 |
-| Ca | +0.37021 | 0.10473 | 4.369 | 0.460 |
-| Mg | −0.72572 | 0.14130 | 1.469 | 0.232 |
-| *R*_d | +3.38281 | 0.08334 | — | — |
+| N | −1.14870 | 0.08055 | 0.949 | 0.118 |
+| P | −2.25402 | 0.10347 | 0.314 | 0.034 |
+| K | +0.36933 | 0.21553 | 4.420 | 0.972 |
+| Ca | +0.36960 | 0.09937 | 4.328 | 0.476 |
+| Mg | −0.72992 | 0.13083 | 1.449 | 0.224 |
+| *R*_d | +3.39372 | 0.08532 | — | — |
+
+The tool was additionally cross-validated against an independent 72-observation maize dataset (Magallanes-Quintanar et al., 2006), reproducing the published CND norms within 0.0010–0.0140 in *V*\*_X units.
 
 ---
 
@@ -141,13 +151,13 @@ scipy
 plotly
 reportlab
 openpyxl
-kaleido        # optional — required for high-resolution PNG export
+kaleido # optional — required for high-resolution PNG export
 ```
 
 ### Install
 
 ```bash
-git clone https://github.com/<your-username>/cnd-dashboard.git
+git clone https://github.com/tiquis/cnd-dashboard.git
 cd cnd-dashboard
 pip install -r requirements.txt
 ```
@@ -155,7 +165,7 @@ pip install -r requirements.txt
 ### Run
 
 ```bash
-streamlit run CND_V14.py
+streamlit run app.py
 ```
 
 The application opens automatically at `http://localhost:8501`.
@@ -168,13 +178,13 @@ The application opens automatically at `http://localhost:8501`.
 
 ```
 cnd-dashboard/
-├── CND_V14.py              # Main application (Streamlit)
-├── nopal.csv               # Validation dataset (36 observations)
-├── requirements.txt        # Python dependencies
-├── README.md               # This file
+├── app.py # Main application (Streamlit)
+├── nopal.csv # Validation dataset (36 observations)
+├── requirements.txt # Python dependencies
+├── README.md # This file
 └── figures/
-    ├── Cumulative_Variance_Ratio_Khiari_style.png
-    └── CND_ChiSquare_CDF_df6.png
+├── Cumulative_Variance_Ratio_Khiari_style.png
+└── CND_ChiSquare_CDF_df6.png
 ```
 
 ---
@@ -202,7 +212,7 @@ If you use CND Dashboard in your research, please cite the accompanying paper (u
 
 And the methodological references:
 
-> Khiari, L.; Parent, L.E.; Tremblay, N. Selecting the high-yield subpopulation for diagnosing nutrient imbalance in crops. *Agronomy Journal* **2001**, *93*, 802–808. https://doi.org/10.2134/agronj2001.933802x
+> Khiari, L.; Parent, L.E.; Tremblay, N. Selecting the high-yield subpopulation for diagnosing nutrient imbalance in crops. *Agronomy Journal* **2001**, *93*, 802–808. https://doi.org/10.2134/agronj2001.934802x
 
 > Magallanes-Quintanar, R.; Valdez-Cepeda, R.D.; et al. Compositional Nutrient Diagnosis in nopal (*Opuntia ficus-indica*). *Journal of the Professional Association for Cactus Development* **2004**, *6*, 78–89.
 
@@ -212,21 +222,21 @@ And the methodological references:
 
 ## Authors
 
-**Rafael Magallanes-Quintanar** (corresponding author)  
-Unidad Académica de Ingeniería Eléctrica, Universidad Autónoma de Zacatecas  
-Jardín Juárez 147, Centro, Zacatecas, C.P. 98000, México  
+**Rafael Magallanes-Quintanar** (corresponding author)
+Unidad Académica de Ingeniería Eléctrica, Universidad Autónoma de Zacatecas
+Jardín Juárez 147, Centro, Zacatecas, C.P. 98000, México
 ✉ tiquis@uaz.edu.mx
 
-**Ricardo David Valdez-Cepeda**  
-Centro Regional Universitario Centro-Norte, Universidad Autónoma Chapingo  
-Apdo. Postal 196, C.P. 98001 Zacatecas, Zac., México  
+**Ricardo David Valdez-Cepeda**
+Centro Regional Universitario Centro-Norte, Universidad Autónoma Chapingo
+Apdo. Postal 196, C.P. 98001 Zacatecas, Zac., México
 ✉ vacrida@hotmail.com
 
 ---
 
 ## License
 
-This project is released under the [MIT License](LICENSE).  
+This project is released under the [MIT License](LICENSE).
 The nopal validation dataset (`nopal.csv`) is released under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 ---
