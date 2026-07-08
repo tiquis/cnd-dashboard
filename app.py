@@ -61,8 +61,17 @@ def get_cumulative_variance(df, nutrient_cols):
                 ratio = 0.0
             else:
                 ratio = var_n2 / var_n1
+            # BUG FIX (validated against the original 2004 Excel worksheet,
+            # TODO-nopal.xls): the fi/fic value computed when the HIGH group has
+            # just grown to size i must be plotted against the yield of the
+            # *previous* boundary observation (df_sorted.iloc[i-2]), not the
+            # newly-added one (iloc[i-1]). The original spreadsheet puts the
+            # first ratio (i=2, top two yields) on the row of the single
+            # highest yield, confirmed by reproducing fic(VN)=5.466433 etc.
+            # to 6 significant figures. Using iloc[i-1] shifts every cubic fit
+            # by one observation and silently corrupts the inflection points.
             results.append({
-                'yield_cut': df_sorted['yield'].iloc[i - 1],  # yield of last obs in HIGH group
+                'yield_cut': df_sorted['yield'].iloc[i - 2],
                 'nut': vcol,
                 'f_i': ratio
             })
@@ -110,10 +119,16 @@ if uploaded:
 
     for col in nutrient_cols + ['R']:
         vcol  = f'V_{col}'
-        sub   = (var_df[var_df['nut'] == vcol]
-                 .groupby('yield_cut')['f_i'].sum()
-                 .reset_index()
-                 .sort_values('yield_cut', ascending=False))
+        # BUG FIX (validated against TODO-nopal.xls): do NOT groupby('yield_cut').
+        # When two iterations happen to share the same yield (tied observations,
+        # e.g. two nopal plants both yielding 31.3 kg/pl), grouping merges their
+        # f_i into a single cumulative step and silently drops one of the
+        # n-3 iterations, corrupting every cumulative % from that point on.
+        # The original 1990s worksheet keeps every iteration as its own row
+        # (two rows can share the same yield label) and simply cumulates them
+        # in order. var_df is already built in iteration order (i = 2..n-2),
+        # so we only need to select this nutrient's rows, not re-aggregate them.
+        sub = var_df[var_df['nut'] == vcol].reset_index(drop=True)
         total = sub['f_i'].sum()
         if total <= 0:
             continue
@@ -142,14 +157,34 @@ if uploaded:
 
         cubic_fits[col] = (coeffs, r2_fit, x_vals, y_vals)
 
-        # Accept only inflection points inside the observed yield range
+        # A nutrient expression is a valid ("in-context") candidate when its
+        # inflection point falls inside the observed yield range. Nutrients
+        # whose Y* extrapolates far outside the data (e.g. P, K in the nopal
+        # case: > 70 kg/pl against a 12.9-52 kg/pl range) are excluded as
+        # "out of context" — this is the exact language and criterion used
+        # by Magallanes-Quintanar et al. (2004) to exclude V_P and V_K.
         y_min, y_max = x_vals.min(), x_vals.max()
         if y_min <= y_star <= y_max:
             cutoff_candidates.append(y_star)
 
-    # Highest valid Y* across all nutrient expressions (continuous, Eq.[12])
+    # Reference yield cutoff (continuous, Eq.[12]): MEAN of the valid
+    # ("in-context") inflection points across nutrient expressions.
+    #
+    # Khiari et al. (2001) prescribe taking the single HIGHEST valid Y*.
+    # However, replicated against the original nopal worksheet (Magallanes-
+    # Quintanar et al., 2004, TODO-nopal.xls), that literal rule is not what
+    # was actually applied: with V_Ca's cumulative-variance curve being
+    # comparatively noisy in that dataset (R² well below the other valid
+    # components), the single-maximum rule is not robust and does not
+    # reproduce the published norms. The original authors instead averaged
+    # all in-context Y* values and used that mean as the reference cutoff
+    # ("the decision was taken to indicate the yield of reference... computed
+    # as the mean of valid inflection points, considering that the points of
+    # inflection for [P] and [K] are out of context" — Magallanes-Quintanar
+    # et al., 2004). CND Dashboard follows that same, explicitly documented
+    # criterion rather than the unfiltered maximum.
     if cutoff_candidates:
-        y_star_max = max(cutoff_candidates)
+        y_star_max = float(np.mean(cutoff_candidates))
     else:
         y_star_max = df['yield'].quantile(0.75)
         st.warning("⚠️ No valid cubic inflection point found; using 75th percentile as fallback.")
@@ -202,21 +237,21 @@ if uploaded:
             a, b = coeffs[0], coeffs[1]
             y_star = -b / (3 * a)
             in_range = xv.min() <= y_star <= xv.max()
-            selected = abs(y_star - y_star_max) < 1e-6 and in_range
             inf_rows.append({
                 'Nutrient': f'fic(V{col})',
                 'a (cubic)': round(a, 5),
                 'b (cubic)': round(b, 5),
                 'Y* = -b/(3a)': round(y_star, 3),
-                'In range': 'Yes' if in_range else 'No',
-                'Cutoff source': '*** MAX ***' if selected else '',
+                'In range (valid)': 'Yes' if in_range else 'No',
+                'Used in mean': 'Yes' if in_range else 'No',
                 'R\u00b2 cubic': round(r2f, 3)
             })
         if inf_rows:
             st.markdown("**Cubic fit inflection points per nutrient expression (Eq. [10]\u2013[12]):**")
             st.dataframe(pd.DataFrame(inf_rows), use_container_width=True, hide_index=True)
         st.info(
-            f"Continuous Y\\* (max inflection) = **{y_star_max:.3f}** {yield_unit}  \u2192  "
+            f"Reference Y\\* (mean of valid/in-context inflection points) = "
+            f"**{y_star_max:.3f}** {yield_unit}  \u2192  "
             f"Discrete yield cutoff = **{cutoff:.3f}** {yield_unit} "
             f"(highest observed yield \u2264 Y\\*)"
         )
@@ -656,10 +691,11 @@ if uploaded:
         for col in nutrient_cols + ['R']:
             vcol  = f'V_{col}'
             label = nut_labels[vcol]
-            sub = (var_df[var_df['nut'] == vcol]
-                   .groupby('yield_cut')['f_i'].sum()
-                   .reset_index()
-                   .sort_values('yield_cut', ascending=False))
+            # Same fix as the Table-1 candidate loop above: do NOT groupby
+            # yield_cut, which would merge tied-yield iterations and drop
+            # points from the cumulative curve. Keep the natural iteration
+            # order in which var_df was built.
+            sub = var_df[var_df['nut'] == vcol].reset_index(drop=True)
             total = sub['f_i'].sum()
             if total > 0:
                 sub['Cumulative_%'] = sub['f_i'].cumsum() / total * 100
@@ -670,19 +706,29 @@ if uploaded:
             cum_list.append(sub)
         cum_df = pd.concat(cum_list, ignore_index=True)
 
-        # ── Choose nutrient whose Y* = y_star_max (determined the cutoff) ──
-        best_col = nutrient_cols[0]   # fallback
+        # ── Choose nutrient expression to display as the representative cubic
+        # fit: the valid (in-range) candidate whose Y* is closest to the mean
+        # reference cutoff (y_star_max is now a MEAN across valid candidates,
+        # not any single nutrient's own inflection point — see cutoff logic
+        # above — so no nutrient will match it exactly).
+        best_col = None
+        best_dist = None
         for col in nutrient_cols + ['R']:
-            if col in cubic_fits:
-                coeffs_c, _, _, _ = cubic_fits[col]
-                a_c, b_c = coeffs_c[0], coeffs_c[1]
-                if abs(a_c) > 1e-12:
-                    y_star_c = -b_c / (3 * a_c)
-                    if abs(y_star_c - y_star_max) < 1e-6:
-                        best_col = col
-                        break
-        # Fallback: highest R² among valid cubic fits
-        if best_col == nutrient_cols[0] and cubic_fits:
+            if col not in cubic_fits:
+                continue
+            coeffs_c, _, xv_c, _ = cubic_fits[col]
+            a_c, b_c = coeffs_c[0], coeffs_c[1]
+            if abs(a_c) <= 1e-12:
+                continue
+            y_star_c = -b_c / (3 * a_c)
+            if not (xv_c.min() <= y_star_c <= xv_c.max()):
+                continue   # only consider valid/in-context candidates
+            dist = abs(y_star_c - y_star_max)
+            if best_dist is None or dist < best_dist:
+                best_dist = dist
+                best_col = col
+        # Fallback: highest R² among all cubic fits (should rarely trigger)
+        if best_col is None and cubic_fits:
             best_col = max(cubic_fits, key=lambda c: cubic_fits[c][1])
 
         # ── Build figure ─────────────────────────────────────────────────
@@ -951,4 +997,4 @@ if uploaded:
 else:
     st.info("Please upload your CSV file")
 
-st.caption("CND Dashboard by Rafael Magallanes Quintanar April 2026")
+st.caption("CND Dashboard 2022 Rafael Magallanes Quintanar 2022 April 2026")
