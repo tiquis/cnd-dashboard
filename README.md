@@ -138,28 +138,31 @@ Missing values are dropped automatically. Column order is flexible — the tool 
 
 ---
 
+## Core library (`cndpy`)
+
+All CND computation (clr transform, Cate–Nelson cutoff detection, norms,
+diagnostic indices, PDF/Excel report generation, and Plotly figures) lives in
+`cndpy`, a standalone, installable, dependency-light Python package with its
+own pytest suite. It has no dependency on Streamlit — the dashboard (`app.py`)
+is a thin UI layer built on top of it.
+
+```bash
+pip install -e .            # installs cndpy (core library only)
+pip install -e ".[app]"     # + streamlit, to also run the dashboard
+pip install -e ".[dev]"     # + pytest, to run the test suite
+pytest                       # runs tests/ (30 tests, includes a full
+                             # regression check against the published
+                             # nopal norms above)
+```
+
 ## Installation and Local Execution
-
-### Requirements
-
-```
-python >= 3.10
-streamlit
-pandas
-numpy
-scipy
-plotly
-reportlab
-openpyxl
-kaleido # optional — required for high-resolution PNG export
-```
 
 ### Install
 
 ```bash
 git clone https://github.com/tiquis/cnd-dashboard.git
 cd cnd-dashboard
-pip install -r requirements.txt
+pip install -e ".[app]"
 ```
 
 ### Run
@@ -178,13 +181,23 @@ The application opens automatically at `http://localhost:8501`.
 
 ```
 cnd-dashboard/
-├── app.py # Main application (Streamlit)
-├── nopal.csv # Validation dataset (36 observations)
-├── requirements.txt # Python dependencies
-├── README.md # This file
+├── app.py                  # Streamlit UI (thin orchestrator over cndpy)
+├── cndpy/                  # Core computation library (no Streamlit dependency)
+│   ├── transform.py        # clr transform
+│   ├── variance.py         # cumulative variance ratio function
+│   ├── cutoff.py           # cubic fit + Cate-Nelson yield cutoff detection
+│   ├── norms.py            # CND norms + critical chi-square
+│   ├── diagnosis.py        # nutrient indices, CND r², limiting-nutrient ranking
+│   ├── reports.py          # PDF/Excel report generation (returns bytes)
+│   └── plots.py            # Plotly figure builders
+├── tests/                  # pytest suite (unit + end-to-end regression tests)
+├── pyproject.toml          # Packaging + pytest config
+├── nopal.csv               # Validation dataset (36 observations)
+├── maiz.csv                # Maize dataset (Magallanes-Quintanar et al., 2006)
+├── README.md               # This file
 └── figures/
-├── Cumulative_Variance_Ratio_Khiari_style.png
-└── CND_ChiSquare_CDF_df6.png
+    ├── Cumulative_Variance_Ratio_Khiari_style.png
+    └── CND_ChiSquare_CDF_df6.png
 ```
 
 ---
