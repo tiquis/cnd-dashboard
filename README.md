@@ -218,7 +218,7 @@ cnd-dashboard/
 
 If you use CND Dashboard in your research, please cite the accompanying paper (under review):
 
-> Magallanes-Quintanar, R.; Valdez-Cepeda, R.D. CND Dashboard: An Open-Source Interactive Tool for Automated Computation of Compositional Nutrient Diagnosis Norms and Real-Time Foliar Diagnosis in Crops. *Computers and Electronics in Agriculture* (under review).
+> Magallanes-Quintanar, R. CND Dashboard: An Open-Source Interactive Tool for Automated Computation of Compositional Nutrient Diagnosis Norms and Real-Time Foliar Diagnosis in Crops. *Computers and Electronics in Agriculture* (under review).
 
 And the methodological references:
 
@@ -236,11 +236,6 @@ And the methodological references:
 Unidad Académica de Ingeniería Eléctrica, Universidad Autónoma de Zacatecas
 Jardín Juárez 147, Centro, Zacatecas, C.P. 98000, México
 ✉ tiquis@uaz.edu.mx
-
-**Ricardo David Valdez-Cepeda**
-Centro Regional Universitario Centro-Norte, Universidad Autónoma Chapingo
-Apdo. Postal 196, C.P. 98001 Zacatecas, Zac., México
-✉ vacrida@hotmail.com
 
 ---
 
