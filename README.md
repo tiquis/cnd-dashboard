@@ -194,10 +194,7 @@ cnd-dashboard/
 ├── pyproject.toml          # Packaging + pytest config
 ├── nopal.csv               # Validation dataset (36 observations)
 ├── maiz.csv                # Maize dataset (Magallanes-Quintanar et al., 2006)
-├── README.md               # This file
-└── figures/
-    ├── Cumulative_Variance_Ratio_Khiari_style.png
-    └── CND_ChiSquare_CDF_df6.png
+└── README.md               # This file
 ```
 
 ---
